@@ -78,21 +78,7 @@
 
 ---
 
-## 🎥 Demo
 
-### Main Dashboard
-![Dashboard](https://via.placeholder.com/800x400?text=Dashboard+Screenshot)
-
-### Technical Analysis
-![Technical Analysis](https://via.placeholder.com/800x400?text=Technical+Analysis+Screenshot)
-
-### AI Advisor
-![AI Advisor](https://via.placeholder.com/800x400?text=AI+Advisor+Screenshot)
-
-### Stock Comparison
-![Comparison](https://via.placeholder.com/800x400?text=Stock+Comparison+Screenshot)
-
----
 
 ## 🛠 Tech Stack
 
