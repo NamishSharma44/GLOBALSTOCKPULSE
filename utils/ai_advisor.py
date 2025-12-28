@@ -535,6 +535,23 @@ The stock is currently showing a {trend.lower()} pattern with RSI at {rsi:.1f}. 
         
         return response
     
+    def _clean_markdown(self, text):
+        """Remove markdown formatting from text for clean HTML display"""
+        import re
+        if not text:
+            return text
+        # Remove **bold** and __bold__
+        text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)
+        text = re.sub(r'__([^_]+)__', r'\1', text)
+        # Remove *italic* and _italic_
+        text = re.sub(r'(?<!\*)\*([^*]+)\*(?!\*)', r'\1', text)
+        text = re.sub(r'(?<!_)_([^_]+)_(?!_)', r'\1', text)
+        # Remove leading bullet points
+        text = re.sub(r'^[\u2022\-\*]\s*', '', text.strip())
+        # Remove markdown headers
+        text = re.sub(r'^#+\s*', '', text)
+        return text.strip()
+    
     def render_analysis(self, analysis, symbol, stock_data, tech_summary, market_code="US"):
         """Render analysis with the existing beautiful UI"""
         # [Keep your existing render_analysis method - it's already good]
@@ -617,65 +634,68 @@ The stock is currently showing a {trend.lower()} pattern with RSI at {rsi:.1f}. 
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                st.markdown("""
+                key_factors = analysis.get('key_factors', [])
+                factors_html = ''.join([f"<div style='display: flex; align-items: flex-start; margin-bottom: 12px;'><span style='color: #2ed573; margin-right: 10px; font-size: 16px;'>✓</span><span style='color: #e2e8f0; font-size: 14px; line-height: 1.5;'>{self._clean_markdown(f)}</span></div>" for f in key_factors])
+                st.markdown(f"""
                 <div style='background-color: #1a202c; padding: 20px; border-radius: 12px; 
                            border-left: 4px solid #2ed573; margin-bottom: 15px;'>
-                    <h3 style='color: #2ed573; margin-top: 0; margin-bottom: 15px;'>Key Factors</h3>
+                    <h3 style='color: #2ed573; margin-top: 0; margin-bottom: 15px;'>✨ Key Factors</h3>
+                    {factors_html}
+                </div>
                 """, unsafe_allow_html=True)
-                for factor in analysis.get('key_factors', []):
-                    st.markdown(f"<p style='color: #e2e8f0; margin: 8px 0; font-size: 14px;'>• {factor}</p>", unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
             
             with col2:
-                st.markdown("""
+                risk_factors = analysis.get('risk_factors', [])
+                risks_html = ''.join([f"<div style='display: flex; align-items: flex-start; margin-bottom: 12px;'><span style='color: #ff6b6b; margin-right: 10px; font-size: 16px;'>⚠</span><span style='color: #e2e8f0; font-size: 14px; line-height: 1.5;'>{self._clean_markdown(f)}</span></div>" for f in risk_factors])
+                st.markdown(f"""
                 <div style='background-color: #1a202c; padding: 20px; border-radius: 12px; 
                            border-left: 4px solid #ff6b6b; margin-bottom: 15px;'>
-                    <h3 style='color: #ff6b6b; margin-top: 0; margin-bottom: 15px;'>Risk Factors</h3>
+                    <h3 style='color: #ff6b6b; margin-top: 0; margin-bottom: 15px;'>⚠️ Risk Factors</h3>
+                    {risks_html}
+                </div>
                 """, unsafe_allow_html=True)
-                for factor in analysis.get('risk_factors', []):
-                    st.markdown(f"<p style='color: #e2e8f0; margin: 8px 0; font-size: 14px;'>• {factor}</p>", unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
             
             with col3:
-                st.markdown("""
+                opportunities = analysis.get('opportunities', [])
+                opps_html = ''.join([f"<div style='display: flex; align-items: flex-start; margin-bottom: 12px;'><span style='color: #00d4aa; margin-right: 10px; font-size: 16px;'>🎯</span><span style='color: #e2e8f0; font-size: 14px; line-height: 1.5;'>{self._clean_markdown(o)}</span></div>" for o in opportunities])
+                st.markdown(f"""
                 <div style='background-color: #1a202c; padding: 20px; border-radius: 12px; 
                            border-left: 4px solid #00d4aa; margin-bottom: 15px;'>
-                    <h3 style='color: #00d4aa; margin-top: 0; margin-bottom: 15px;'>Opportunities</h3>
+                    <h3 style='color: #00d4aa; margin-top: 0; margin-bottom: 15px;'>🚀 Opportunities</h3>
+                    {opps_html}
+                </div>
                 """, unsafe_allow_html=True)
-                for opportunity in analysis.get('opportunities', []):
-                    st.markdown(f"<p style='color: #e2e8f0; margin: 8px 0; font-size: 14px;'>• {opportunity}</p>", unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
             
             st.markdown("---")
             
             col1, col2 = st.columns(2)
             
             with col1:
-                entry_strategy = analysis.get('entry_strategy', 'Consider market conditions')
+                entry_strategy = self._clean_markdown(analysis.get('entry_strategy', 'Consider market conditions'))
                 st.markdown(f"""
                 <div style='background-color: #1a202c; padding: 20px; border-radius: 12px; 
                            border-left: 4px solid #2ed573; margin-bottom: 15px;'>
-                    <h3 style='color: #2ed573; margin-top: 0; margin-bottom: 15px;'>Entry Strategy</h3>
-                    <p style='color: #e2e8f0; margin: 0; font-size: 14px; line-height: 1.6;'>{entry_strategy}</p>
+                    <h3 style='color: #2ed573; margin-top: 0; margin-bottom: 15px;'>📈 Entry Strategy</h3>
+                    <p style='color: #e2e8f0; margin: 0; font-size: 14px; line-height: 1.7;'>{entry_strategy}</p>
                 </div>
                 """, unsafe_allow_html=True)
             
             with col2:
-                exit_strategy = analysis.get('exit_strategy', 'Set appropriate targets')
+                exit_strategy = self._clean_markdown(analysis.get('exit_strategy', 'Set appropriate targets'))
                 st.markdown(f"""
                 <div style='background-color: #1a202c; padding: 20px; border-radius: 12px; 
                            border-left: 4px solid #ff6b6b; margin-bottom: 15px;'>
-                    <h3 style='color: #ff6b6b; margin-top: 0; margin-bottom: 15px;'>Exit Strategy</h3>
-                    <p style='color: #e2e8f0; margin: 0; font-size: 14px; line-height: 1.6;'>{exit_strategy}</p>
+                    <h3 style='color: #ff6b6b; margin-top: 0; margin-bottom: 15px;'>📉 Exit Strategy</h3>
+                    <p style='color: #e2e8f0; margin: 0; font-size: 14px; line-height: 1.7;'>{exit_strategy}</p>
                 </div>
                 """, unsafe_allow_html=True)
             
             if 'analysis_summary' in analysis:
-                summary = analysis['analysis_summary']
+                summary = self._clean_markdown(analysis['analysis_summary'])
                 st.markdown(f"""
                 <div style='background-color: #1a202c; padding: 25px; border-radius: 12px; 
                            border: 2px solid #00d4aa; margin: 20px 0;'>
-                    <h3 style='color: #00d4aa; margin-top: 0; margin-bottom: 15px; text-align: center;'>Detailed Analysis</h3>
+                    <h3 style='color: #00d4aa; margin-top: 0; margin-bottom: 15px; text-align: center;'>📊 Detailed Analysis</h3>
                     <p style='color: #e2e8f0; margin: 0; font-size: 16px; line-height: 1.8; text-align: justify;'>{summary}</p>
                 </div>
                 """, unsafe_allow_html=True)
