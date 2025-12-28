@@ -10,17 +10,31 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Model priority list - faster/cheaper models first for better rate limit handling
+def get_secret(key, default=None):
+    """Get secret from Streamlit Cloud secrets or environment variables"""
+    # First try Streamlit secrets (for Streamlit Cloud deployment)
+    try:
+        if hasattr(st, 'secrets') and key in st.secrets:
+            return st.secrets[key]
+    except Exception:
+        pass
+    # Fallback to environment variables (for local development)
+    return os.getenv(key, default)
+
+# Model priority list - using models/ prefix required by google-genai SDK
+# Lite models have higher rate limits on free tier
 MODEL_PRIORITY = [
-    "gemini-2.5-flash",      # Fast and efficient - try first
-    "gemini-2.0-flash",      # Good fallback
-    "gemini-2.5-pro",        # More capable but rate-limited
+    "models/gemini-2.5-flash-lite",      # Lite model - higher quota
+    "models/gemini-flash-lite-latest",   # Latest lite version
+    "models/gemini-2.0-flash-lite",      # Another lite option
+    "models/gemini-2.5-flash",           # Standard flash
+    "models/gemini-2.0-flash",           # Fallback flash
 ]
 
 class AIAdvisor:
     def __init__(self):
-        api_key = os.getenv("GEMINI_API_KEY")
-        self.current_model = "gemini-2.5-flash"  # Default to fast model
+        api_key = get_secret("GEMINI_API_KEY")
+        self.current_model = "models/gemini-2.5-flash-lite"  # Lite model for better quota
         self.retry_delay = 2  # Base delay for retries in seconds
         self.max_retries = 3
         

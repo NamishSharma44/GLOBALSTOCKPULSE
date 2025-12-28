@@ -10,12 +10,21 @@ from bs4 import BeautifulSoup
 import time
 import plotly.graph_objects as go
 
+def get_secret(key, default=None):
+    """Get secret from Streamlit Cloud secrets or environment variables"""
+    try:
+        if hasattr(st, 'secrets') and key in st.secrets:
+            return st.secrets[key]
+    except Exception:
+        pass
+    return os.getenv(key, default)
+
 class NewsRenderer:
     def __init__(self):
-        self.news_api_key = os.getenv("NEWS_API_KEY", "")
-        self.marketaux_api_key = os.getenv("MARKETAUX_API_KEY", "")
-        self.alpha_vantage_key = os.getenv("ALPHA_VANTAGE_API_KEY", "")
-        self.finnhub_key = os.getenv("FINNHUB_API_KEY", "")
+        self.news_api_key = get_secret("NEWS_API_KEY", "")
+        self.marketaux_api_key = get_secret("MARKETAUX_API_KEY", "")
+        self.alpha_vantage_key = get_secret("ALPHA_VANTAGE_API_KEY", "")
+        self.finnhub_key = get_secret("FINNHUB_API_KEY", "")
         
     @st.cache_data(ttl=1800)
     def get_news_data(_self, symbol, market_code):
