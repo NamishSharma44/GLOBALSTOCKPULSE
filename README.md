@@ -114,9 +114,6 @@ MARKETAUX_API_KEY=your_marketaux_key (optional)
 streamlit run app.py
 ```
 
-6. **Open in browser**
-Navigate to `http://localhost:8501`
-
 ---
 
 ## 🛠️ Tech Stack
@@ -164,87 +161,10 @@ GlobalStockPulse/
 | **NewsAPI** | News articles | Optional | [newsapi.org](https://newsapi.org/) |
 | **MarketAux** | Financial news | Optional | [marketaux.com](https://www.marketaux.com/) |
 
-> **Note**: The app works with just the Gemini API key. Other APIs enhance news coverage.
 
----
 
-## ☁️ Deployment (Streamlit Cloud)
 
-1. Push your code to GitHub
-2. Go to [share.streamlit.io](https://share.streamlit.io/)
-3. Connect your GitHub repository
-4. Add secrets in the Streamlit Cloud dashboard:
-```toml
-GEMINI_API_KEY = "your_api_key"
-NEWS_API_KEY = "your_key"
-ALPHA_VANTAGE_API_KEY = "your_key"
-FINNHUB_API_KEY = "your_key"
-```
-
----
-
-## 📸 Screenshots
-
-### Overview Dashboard
-- Real-time price data with candlestick charts
-- Key metrics: Current price, volume, 52-week high/low
-
-### Technical Analysis
-- Interactive charts with multiple indicators
-- RSI, MACD, Bollinger Bands visualization
-
-### AI Advisor
-- AI-powered buy/sell recommendations
-- Risk assessment and price targets
-- Interactive chatbot for questions
-
-### Stock Comparison
-- Side-by-side analysis of multiple stocks
-- Risk-return scatter plots
-- AI-ranked recommendations
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## ⚠️ Disclaimer
-
-**This application is for educational and informational purposes only.** 
-
-- Not financial advice
-- Past performance doesn't guarantee future results
-- Always conduct your own research
-- Consult qualified financial advisors before investing
-
----
-
-## 👨‍💻 Author
-
-**Namish Sharma**
-- GitHub: [@NamishSharma44](https://github.com/NamishSharma44)
-
----
-
-## 🌟 Star History
-
-If you find this project useful, please consider giving it a ⭐!
-
+-
 ---
 
 <p align="center">
