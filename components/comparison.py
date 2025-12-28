@@ -161,18 +161,13 @@ Provide a comprehensive comparison in JSON format:
 }}"""
             
             from google.genai import types
-            response = self.ai_advisor.client.models.generate_content(
-                model="gemini-2.0-flash-exp",
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    temperature=0.4,
-                    max_output_tokens=2500
-                )
-            )
             
-            if response.text:
+            # Use the retry method from ai_advisor
+            response_text = self.ai_advisor._call_model_with_retry(prompt, temperature=0.4, max_tokens=2500)
+            
+            if response_text:
                 import json
-                clean_text = response.text.strip()
+                clean_text = response_text.strip()
                 
                 if clean_text.startswith('```json'):
                     clean_text = clean_text[7:]

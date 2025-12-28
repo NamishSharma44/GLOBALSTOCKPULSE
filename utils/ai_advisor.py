@@ -1,5 +1,6 @@
 import json
 import os
+import time
 import streamlit as st
 from datetime import datetime
 from google import genai
@@ -9,12 +10,22 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Model priority list - faster/cheaper models first for better rate limit handling
+MODEL_PRIORITY = [
+    "gemini-2.5-flash",      # Fast and efficient - try first
+    "gemini-2.0-flash",      # Good fallback
+    "gemini-2.5-pro",        # More capable but rate-limited
+]
+
 class AIAdvisor:
     def __init__(self):
         api_key = os.getenv("GEMINI_API_KEY")
+        self.current_model = "gemini-2.5-flash"  # Default to fast model
+        self.retry_delay = 2  # Base delay for retries in seconds
+        self.max_retries = 3
         
         if not api_key or api_key == "default_key" or api_key == "your_actual_api_key_here":
-            st.error("⚠️ Gemini API key not configured. Please add GEMINI_API_KEY to your .env file")
+            st.warning("⚠️ Gemini API key not configured. Using fallback analysis mode.")
             self.available = False
             self.client = None
         else:
@@ -22,9 +33,64 @@ class AIAdvisor:
                 self.client = genai.Client(api_key=api_key)
                 self.available = True
             except Exception as e:
-                st.error(f"Failed to initialize Gemini AI: {str(e)}")
+                st.warning(f"AI initialization issue: {str(e)}. Using fallback analysis.")
                 self.available = False
                 self.client = None
+    
+    def _call_model_with_retry(self, prompt, temperature=0.4, max_tokens=2000):
+        """Call Gemini API with retry logic and model fallback"""
+        if not self.available or self.client is None:
+            return None
+        
+        last_error = None
+        
+        # Try the current working model first, then others
+        models_to_try = [self.current_model] + [m for m in MODEL_PRIORITY if m != self.current_model]
+        
+        for model_name in models_to_try:
+            for attempt in range(self.max_retries):
+                try:
+                    response = self.client.models.generate_content(
+                        model=model_name,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            temperature=temperature,
+                            max_output_tokens=max_tokens,
+                            top_p=0.95
+                        )
+                    )
+                    
+                    if response.text:
+                        self.current_model = model_name  # Remember working model
+                        return response.text
+                        
+                except Exception as e:
+                    last_error = str(e)
+                    error_lower = last_error.lower()
+                    
+                    # Handle rate limit errors
+                    if "429" in last_error or "resource_exhausted" in error_lower or "rate" in error_lower:
+                        if attempt < self.max_retries - 1:
+                            delay = self.retry_delay * (2 ** attempt)  # Exponential backoff
+                            time.sleep(delay)
+                            continue
+                        else:
+                            # Move to next model
+                            break
+                    
+                    # Handle model not found - try next model immediately
+                    elif "404" in last_error or "not found" in error_lower:
+                        break
+                    
+                    # For other errors, retry with backoff
+                    elif attempt < self.max_retries - 1:
+                        time.sleep(self.retry_delay)
+                        continue
+                    else:
+                        break
+        
+        # All models failed
+        return None
     
     def generate_analysis(self, symbol, stock_data, tech_summary, news_sentiment, market_code="US"):
         """Generate comprehensive AI-powered investment analysis"""
@@ -107,37 +173,46 @@ Provide analysis in valid JSON format:
 }}
 """
             
-            response = self.client.models.generate_content(
-                model="gemini-2.5-pro",
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    temperature=0.4,  # Lower temperature for more consistent analysis
-                    max_output_tokens=3000,
-                    top_p=0.95
-                )
-            )
+            response_text = self._call_model_with_retry(prompt, temperature=0.4, max_tokens=2500)
             
-            if response.text:
-                clean_text = response.text.strip()
+            if response_text:
+                clean_text = response_text.strip()
                 
-                # Remove markdown formatting
-                if clean_text.startswith('```json'):
-                    clean_text = clean_text[7:]
-                if clean_text.startswith('```'):
-                    clean_text = clean_text[3:]
-                if clean_text.endswith('```'):
-                    clean_text = clean_text[:-3]
+                # Remove markdown formatting more robustly
+                if '```json' in clean_text:
+                    start_idx = clean_text.find('```json') + 7
+                    end_idx = clean_text.rfind('```')
+                    if end_idx > start_idx:
+                        clean_text = clean_text[start_idx:end_idx]
+                elif '```' in clean_text:
+                    start_idx = clean_text.find('```') + 3
+                    end_idx = clean_text.rfind('```')
+                    if end_idx > start_idx:
+                        clean_text = clean_text[start_idx:end_idx]
                 
                 clean_text = clean_text.strip()
-                analysis = json.loads(clean_text)
                 
-                # Validate and enhance analysis
-                return self._validate_analysis(analysis, current_price, market_code)
+                # Try to parse JSON
+                try:
+                    analysis = json.loads(clean_text)
+                    # Validate and enhance analysis
+                    return self._validate_analysis(analysis, current_price, market_code)
+                except json.JSONDecodeError:
+                    # Try to extract JSON from response if parsing failed
+                    import re
+                    json_match = re.search(r'\{[\s\S]*\}', clean_text)
+                    if json_match:
+                        try:
+                            analysis = json.loads(json_match.group())
+                            return self._validate_analysis(analysis, current_price, market_code)
+                        except:
+                            pass
             
+            # If we get here, AI response was empty or unparseable
             return self._create_fallback_analysis(symbol, current_price, tech_summary, news_sentiment, market_code)
             
         except Exception as e:
-            st.warning(f"AI analysis encountered an issue. Using enhanced fallback analysis.")
+            # Only show warning for unexpected errors, not for expected fallback scenarios
             current_price = stock_data['close'].iloc[-1] if not stock_data.empty else 100.0
             return self._create_fallback_analysis(symbol, current_price, tech_summary, news_sentiment, market_code)
     
@@ -382,9 +457,9 @@ Provide analysis in valid JSON format:
             return f"Low-confidence signal. Consider smaller position (20-40%) or wait for confirmation."
     
     def generate_chat_response(self, question, symbol, stock_data, tech_summary, market_code="US"):
-        """Enhanced chatbot with better context"""
+        """Enhanced chatbot with better context and retry logic"""
         if not self.available or self.client is None:
-            return "AI chatbot is currently unavailable. Please configure your GEMINI_API_KEY in the .env file."
+            return self._generate_fallback_chat_response(question, symbol, stock_data, tech_summary, market_code)
         
         try:
             current_price = stock_data['close'].iloc[-1]
@@ -404,19 +479,47 @@ Provide analysis in valid JSON format:
 
             Provide a helpful answer in 2-4 paragraphs. Be specific, actionable, and educational. If discussing trading strategies, always emphasize risk management."""
             
-            response = self.client.models.generate_content(
-                model="gemini-2.5-pro",
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    temperature=0.7,
-                    max_output_tokens=1000
-                )
-            )
+            # Use the retry method instead of direct API call
+            response_text = self._call_model_with_retry(prompt, temperature=0.7, max_tokens=1000)
             
-            return response.text if response.text else "Unable to generate response at this time."
+            if response_text:
+                return response_text
+            else:
+                return self._generate_fallback_chat_response(question, symbol, stock_data, tech_summary, market_code)
             
         except Exception as e:
-            return f"Error processing your question. Please try rephrasing it."
+            return self._generate_fallback_chat_response(question, symbol, stock_data, tech_summary, market_code)
+    
+    def _generate_fallback_chat_response(self, question, symbol, stock_data, tech_summary, market_code="US"):
+        """Generate a basic response when AI is unavailable"""
+        current_price = stock_data['close'].iloc[-1] if not stock_data.empty else 0
+        rsi = tech_summary.get('rsi_current', 50)
+        trend = tech_summary.get('trend_signal', 'Neutral')
+        macd = tech_summary.get('macd_signal', 'Neutral')
+        currency_code = CurrencyHelper.get_currency_code(market_code)
+        
+        # Basic response based on technical data
+        response = f"""Based on the current technical indicators for {symbol}:
+
+**Current Status:**
+- Price: {CurrencyHelper.format_price(current_price, market_code)} ({currency_code})
+- RSI: {rsi:.1f} ({'Overbought - caution advised' if rsi > 70 else 'Oversold - potential buying opportunity' if rsi < 30 else 'Neutral zone'})
+- Trend: {trend}
+- MACD Signal: {macd}
+
+**Quick Analysis:**
+The stock is currently showing a {trend.lower()} pattern with RSI at {rsi:.1f}. """
+        
+        if rsi > 70:
+            response += "The overbought RSI suggests caution as a pullback may be coming. Consider waiting for better entry points."
+        elif rsi < 30:
+            response += "The oversold RSI could indicate a potential buying opportunity, but confirm with other indicators before entering."
+        else:
+            response += "The neutral RSI gives flexibility for both entry and exit decisions based on your strategy."
+        
+        response += "\n\n*Note: AI-powered analysis is temporarily unavailable. This is a basic technical summary. Please do your own research before making investment decisions.*"
+        
+        return response
     
     def render_analysis(self, analysis, symbol, stock_data, tech_summary, market_code="US"):
         """Render analysis with the existing beautiful UI"""
@@ -564,27 +667,32 @@ Provide analysis in valid JSON format:
                 """, unsafe_allow_html=True)
             
             st.markdown("---")
-            st.markdown("### Ask the AI Advisor")
+            st.markdown("### 🤖 Ask the AI Advisor")
             
+            # Initialize chat history in session state
             if f"chat_history_{symbol}" not in st.session_state:
                 st.session_state[f"chat_history_{symbol}"] = []
             
-            user_question = st.text_input(
-                "Your question:", 
-                placeholder=f"e.g., What factors might affect {symbol}'s price?",
-                key=f"chat_input_{symbol}"
-            )
+            # Use a form to prevent page reloads on every interaction
+            with st.form(key=f"chat_form_{symbol}", clear_on_submit=True):
+                user_question = st.text_input(
+                    "Your question:", 
+                    placeholder=f"e.g., What factors might affect {symbol}'s price?",
+                    key=f"chat_input_{symbol}"
+                )
+                
+                col1, col2 = st.columns([1, 5])
+                with col1:
+                    ask_button = st.form_submit_button("Ask", use_container_width=True)
+                with col2:
+                    pass  # Empty column for spacing
             
-            col1, col2 = st.columns([1, 5])
-            with col1:
-                ask_button = st.button("Ask", key=f"ask_btn_{symbol}")
-            with col2:
-                clear_chat = st.button("Clear Chat", key=f"clear_btn_{symbol}")
-            
-            if clear_chat:
+            # Clear chat button outside form
+            if st.button("🗑️ Clear Chat", key=f"clear_btn_{symbol}"):
                 st.session_state[f"chat_history_{symbol}"] = []
                 st.rerun()
             
+            # Process the question without rerunning
             if ask_button and user_question.strip():
                 with st.spinner("AI is thinking..."):
                     response = self.generate_chat_response(user_question, symbol, stock_data, tech_summary, market_code)
@@ -593,14 +701,16 @@ Provide analysis in valid JSON format:
                         "answer": response,
                         "timestamp": datetime.now().strftime("%H:%M")
                     })
-                st.rerun()
             
+            # Display chat history in a container (most recent first)
             if st.session_state[f"chat_history_{symbol}"]:
-                st.markdown("### Chat History")
-                for i, chat in enumerate(reversed(st.session_state[f"chat_history_{symbol}"][-5:])):
-                    with st.expander(f"Q: {chat['question'][:50]}... ({chat['timestamp']})", expanded=(i==0)):
-                        st.markdown(f"**Question:** {chat['question']}")
-                        st.markdown(f"**Answer:** {chat['answer']}")
+                st.markdown("### 💬 Chat History")
+                chat_container = st.container()
+                with chat_container:
+                    for i, chat in enumerate(reversed(st.session_state[f"chat_history_{symbol}"][-5:])):
+                        with st.expander(f"Q: {chat['question'][:50]}{'...' if len(chat['question']) > 50 else ''} ({chat['timestamp']})", expanded=(i==0)):
+                            st.markdown(f"**Question:** {chat['question']}")
+                            st.markdown(f"**Answer:** {chat['answer']}")
                 
         except Exception as e:
             st.error(f"Error rendering analysis: {str(e)}")

@@ -451,25 +451,48 @@ if analyze_button or 'current_analysis' in st.session_state:
     elif selected_tab == "🤖 AI Advisor":
         st.markdown(f"## 🤖 AI Investment Advisor - {symbol}")
         
-        with st.spinner("Generating AI analysis..."):
-            # Get technical data for AI analysis
-            technical_data = components['technical_analyzer'].calculate_all_indicators(stock_data)
-            tech_summary = components['technical_analyzer'].get_technical_summary(technical_data)
-            
-            # Get news sentiment
-            news_data = components['news_renderer'].get_news_data(symbol, market_code)
-            news_sentiment = "neutral"
-            if news_data:
-                avg_sentiment = sum(article.get('sentiment_score', 0) for article in news_data) / len(news_data)
-                if avg_sentiment > 0.1:
-                    news_sentiment = "positive"
-                elif avg_sentiment < -0.1:
-                    news_sentiment = "negative"
-            
-            # Generate AI analysis
-            ai_analysis = components['ai_advisor'].generate_analysis(
-                symbol, stock_data, tech_summary, news_sentiment, market_code
-            )
+        # Cache key for AI analysis
+        analysis_cache_key = f"ai_analysis_{symbol}_{market_code}_{days}"
+        
+        # Check if we have cached analysis
+        if analysis_cache_key not in st.session_state:
+            with st.spinner("Generating AI analysis..."):
+                # Get technical data for AI analysis
+                technical_data = components['technical_analyzer'].calculate_all_indicators(stock_data)
+                tech_summary = components['technical_analyzer'].get_technical_summary(technical_data)
+                
+                # Get news sentiment
+                news_data = components['news_renderer'].get_news_data(symbol, market_code)
+                news_sentiment = "neutral"
+                if news_data:
+                    avg_sentiment = sum(article.get('sentiment_score', 0) for article in news_data) / len(news_data)
+                    if avg_sentiment > 0.1:
+                        news_sentiment = "positive"
+                    elif avg_sentiment < -0.1:
+                        news_sentiment = "negative"
+                
+                # Generate AI analysis
+                ai_analysis = components['ai_advisor'].generate_analysis(
+                    symbol, stock_data, tech_summary, news_sentiment, market_code
+                )
+                
+                # Cache the analysis
+                st.session_state[analysis_cache_key] = {
+                    'analysis': ai_analysis,
+                    'tech_summary': tech_summary
+                }
+        else:
+            # Use cached analysis
+            ai_analysis = st.session_state[analysis_cache_key]['analysis']
+            tech_summary = st.session_state[analysis_cache_key]['tech_summary']
+        
+        # Add refresh button
+        col1, col2 = st.columns([6, 1])
+        with col2:
+            if st.button("🔄 Refresh", key="refresh_ai_analysis"):
+                if analysis_cache_key in st.session_state:
+                    del st.session_state[analysis_cache_key]
+                st.rerun()
         
         if ai_analysis:
             components['ai_advisor'].render_analysis(ai_analysis, symbol, stock_data, tech_summary, market_code)
@@ -484,19 +507,34 @@ if analyze_button or 'current_analysis' in st.session_state:
             if f"chat_history_{symbol}" not in st.session_state:
                 st.session_state[f"chat_history_{symbol}"] = []
             
-            user_question = st.text_input(
-                "Your question:", 
-                placeholder=f"e.g., What factors might affect {symbol}'s price?",
-                key=f"fallback_chat_input_{symbol}"
-            )
+            # Use a form to prevent page reloads
+            with st.form(key=f"fallback_chat_form_{symbol}", clear_on_submit=True):
+                user_question = st.text_input(
+                    "Your question:", 
+                    placeholder=f"e.g., What factors might affect {symbol}'s price?",
+                    key=f"fallback_chat_input_{symbol}"
+                )
+                ask_button = st.form_submit_button("Ask")
             
-            if st.button("Ask", key=f"fallback_ask_btn_{symbol}") and user_question.strip():
+            if ask_button and user_question.strip():
                 with st.spinner("AI is thinking..."):
                     tech_summary = components['technical_analyzer'].get_technical_summary(
                         components['technical_analyzer'].calculate_all_indicators(stock_data)
                     )
                     response = components['ai_advisor'].generate_chat_response(user_question, symbol, stock_data, tech_summary)
-                    st.markdown(f"**Answer:** {response}")
+                    st.session_state[f"chat_history_{symbol}"].append({
+                        "question": user_question,
+                        "answer": response,
+                        "timestamp": datetime.now().strftime("%H:%M")
+                    })
+            
+            # Display chat history
+            if st.session_state[f"chat_history_{symbol}"]:
+                st.markdown("### 💬 Chat History")
+                for i, chat in enumerate(reversed(st.session_state[f"chat_history_{symbol}"][-5:])):
+                    with st.expander(f"Q: {chat['question'][:50]}{'...' if len(chat['question']) > 50 else ''} ({chat['timestamp']})", expanded=(i==0)):
+                        st.markdown(f"**Question:** {chat['question']}")
+                        st.markdown(f"**Answer:** {chat['answer']}")
                     
 
     # Compare Stocks Tab
